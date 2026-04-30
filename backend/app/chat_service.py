@@ -1,4 +1,5 @@
 import json
+import re
 from asyncio import TimeoutError as AsyncTimeoutError, wait_for
 from typing import Any
 
@@ -47,6 +48,84 @@ class ChatService:
             "Please ask me to check product, order, or account details and I will query Meridian systems."
         )
 
+    @staticmethod
+    def _extract_failed_function_call(error_text: str) -> tuple[str, dict[str, Any]] | None:
+        match = re.search(
+            r"<function=(?P<name>[A-Za-z0-9_]+)>(?P<body>.*?)</function>",
+            error_text,
+            flags=re.DOTALL,
+        )
+        if not match:
+            return None
+
+        tool_name = match.group("name").strip()
+        body = match.group("body").strip()
+        if not body:
+            return tool_name, {}
+
+        try:
+            parsed = json.loads(body)
+            if isinstance(parsed, dict):
+                return tool_name, parsed
+        except Exception:  # noqa: BLE001
+            pass
+
+        kv_pairs = re.findall(r'([A-Za-z0-9_]+)\s*=\s*"([^"]*)"', body)
+        if kv_pairs:
+            return tool_name, {k: v for k, v in kv_pairs}
+
+        return tool_name, {}
+
+    async def _recover_from_tool_use_failed(
+        self,
+        error_text: str,
+        user_message: str,
+        used_tools: list[str],
+    ) -> str | None:
+        recovered = self._extract_failed_function_call(error_text)
+        if not recovered:
+            return None
+
+        tool_name, tool_args = recovered
+        used_tools.append(tool_name)
+
+        try:
+            tool_result = await wait_for(
+                execute_tool(tool_name, tool_args),
+                timeout=settings.tool_timeout_seconds,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "Recovery tool execution failed",
+                extra={"tool_name": tool_name},
+            )
+            return None
+
+        try:
+            summary = await wait_for(
+                client.chat.completions.create(
+                    model=settings.llm_model,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {
+                            "role": "user",
+                            "content": (
+                                "Summarize this backend tool result for the customer clearly and concisely. "
+                                "Do not mention internal tool names.\n\n"
+                                f"Original user request: {user_message}\n"
+                                f"Tool result:\n{tool_result[:8000]}"
+                            ),
+                        },
+                    ],
+                    temperature=0.2,
+                ),
+                timeout=settings.llm_timeout_seconds,
+            )
+            return summary.choices[0].message.content or tool_result[:1200]
+        except Exception:  # noqa: BLE001
+            logger.exception("Recovery summarization failed")
+            return tool_result[:1200]
+
     async def run(self, user_message: str, history: list[ChatMessage]) -> tuple[str, list[str]]:
         if not settings.groq_api_key:
             return "Chatbot is not configured yet. Please set GROQ_API_KEY.", []
@@ -89,9 +168,16 @@ class ChatService:
                 )
             except AsyncTimeoutError:
                 return "The assistant timed out while thinking. Please try again.", used_tools
-            except Exception as exc: 
+            except Exception as exc:
                 error_text = str(exc)
                 if "tool_use_failed" in error_text or "Failed to call a function" in error_text:
+                    recovered_answer = await self._recover_from_tool_use_failed(
+                        error_text=error_text,
+                        user_message=user_message,
+                        used_tools=used_tools,
+                    )
+                    if recovered_answer:
+                        return recovered_answer, used_tools
                     logger.warning("Model tool-call format failure", extra={"error": error_text[:500]})
                     return (
                         "I hit a tool-call formatting issue while querying Meridian systems. "
