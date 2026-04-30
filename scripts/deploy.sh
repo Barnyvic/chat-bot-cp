@@ -18,17 +18,15 @@ fi
 echo "==> Terraform apply"
 pushd infra/terraform >/dev/null
 
-cat > terraform.auto.tfvars <<VARS
-aws_region         = "${AWS_REGION}"
-project_name       = "${PROJECT_NAME}"
-backend_image_tag  = "${BACKEND_TAG}"
-frontend_image_tag = "${FRONTEND_TAG}"
-mcp_server_url     = "${MCP_SERVER_URL}"
-groq_api_key       = "${GROQ_API_KEY}"
-VARS
+export TF_VAR_groq_api_key="${GROQ_API_KEY}"
 
 terraform init
 terraform apply -auto-approve \
+  -var="aws_region=${AWS_REGION}" \
+  -var="project_name=${PROJECT_NAME}" \
+  -var="backend_image_tag=${BACKEND_TAG}" \
+  -var="frontend_image_tag=${FRONTEND_TAG}" \
+  -var="mcp_server_url=${MCP_SERVER_URL}" \
   -target=aws_ecr_repository.backend \
   -target=aws_ecr_repository.frontend \
   -target=aws_iam_role.apprunner_ecr_access_role \
@@ -55,7 +53,12 @@ docker buildx build --platform linux/amd64 -t "${FRONTEND_REPO_URL}:${FRONTEND_T
 
 echo "==> Terraform full apply"
 pushd infra/terraform >/dev/null
-terraform apply -auto-approve
+terraform apply -auto-approve \
+  -var="aws_region=${AWS_REGION}" \
+  -var="project_name=${PROJECT_NAME}" \
+  -var="backend_image_tag=${BACKEND_TAG}" \
+  -var="frontend_image_tag=${FRONTEND_TAG}" \
+  -var="mcp_server_url=${MCP_SERVER_URL}"
 FRONTEND_SERVICE_URL="$(terraform output -raw frontend_service_url)"
 popd >/dev/null
 
