@@ -1,6 +1,6 @@
 import json
 import re
-from asyncio import TimeoutError as AsyncTimeoutError, wait_for
+from asyncio import TimeoutError as AsyncTimeoutError, sleep, wait_for
 from typing import Any
 
 from app.config import settings
@@ -47,6 +47,30 @@ class ChatService:
             "I don't have verified backend data for that yet. "
             "Please ask me to check product, order, or account details and I will query Meridian systems."
         )
+
+    @staticmethod
+    def _compact_history(history: list[ChatMessage]) -> list[dict[str, str]]:
+        """
+        Keep recent conversational context while preventing token blowups from
+        very long tool-rich answers (e.g. large order lists).
+        """
+        compact: list[dict[str, str]] = []
+        total_chars = 0
+        max_total_chars = 7000
+        max_message_chars = 1200
+
+        for msg in reversed(history[-12:]):
+            content = (msg.content or "").strip()
+            if not content:
+                continue
+            clipped = content[:max_message_chars]
+            if total_chars + len(clipped) > max_total_chars:
+                continue
+            compact.append({"role": msg.role, "content": clipped})
+            total_chars += len(clipped)
+
+        compact.reverse()
+        return compact
 
     @staticmethod
     def _extract_failed_function_call(error_text: str) -> tuple[str, dict[str, Any]] | None:
@@ -148,11 +172,11 @@ class ChatService:
         ]
 
         messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
-        for msg in history[-12:]:
-            messages.append({"role": msg.role, "content": msg.content})
+        messages.extend(self._compact_history(history))
         messages.append({"role": "user", "content": user_message})
 
         used_tools: list[str] = []
+        rate_limit_retry_used = False
 
         for _ in range(settings.max_turns):
             try:
@@ -183,6 +207,20 @@ class ChatService:
                         "I hit a tool-call formatting issue while querying Meridian systems. "
                         "Please retry your request once; if it persists, ask a more specific query "
                         "like 'list all products in monitors category'.",
+                        used_tools,
+                    )
+                if "rate limit" in error_text.lower() or "too many requests" in error_text.lower():
+                    if not rate_limit_retry_used:
+                        rate_limit_retry_used = True
+                        await sleep(2)
+                        continue
+                    return (
+                        "The AI provider is rate-limiting requests right now. Please wait a few seconds and retry.",
+                        used_tools,
+                    )
+                if "maximum context length" in error_text.lower() or "context" in error_text.lower():
+                    return (
+                        "This conversation became too long for one request. Please retry with a shorter follow-up.",
                         used_tools,
                     )
                 logger.exception("LLM completion failed")

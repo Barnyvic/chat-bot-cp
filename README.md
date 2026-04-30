@@ -53,7 +53,7 @@ NEXT_BACKEND_URL=http://localhost:8000 npm run dev
 
 ```bash
 export GROQ_API_KEY=your_key
-export LLM_MODEL=llama-3.3-70b-versatile
+export LLM_MODEL=llama-3.1-8b-instant
 docker compose up --build
 ```
 

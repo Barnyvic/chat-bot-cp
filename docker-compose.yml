@@ -4,7 +4,7 @@ services:
       context: ./backend
     environment:
       GROQ_API_KEY: ${GROQ_API_KEY}
-      LLM_MODEL: ${LLM_MODEL:-llama-3.3-70b-versatile}
+      LLM_MODEL: ${LLM_MODEL:-llama-3.1-8b-instant}
       MCP_SERVER_URL: ${MCP_SERVER_URL:-https://order-mcp-74afyau24q-uc.a.run.app/mcp}
     ports:
       - "8000:8000"
