@@ -107,7 +107,7 @@ resource "aws_apprunner_service" "backend" {
       image_configuration {
         port = "8000"
         runtime_environment_variables = {
-          LLM_MODEL      = "llama-3.1-8b-instant"
+          LLM_MODEL      = "llama-3.3-70b-versatile"
           MCP_SERVER_URL = var.mcp_server_url
         }
         runtime_environment_secrets = {

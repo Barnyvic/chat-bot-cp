@@ -89,6 +89,18 @@ class ChatService:
                 )
             except AsyncTimeoutError:
                 return "The assistant timed out while thinking. Please try again.", used_tools
+            except Exception as exc: 
+                error_text = str(exc)
+                if "tool_use_failed" in error_text or "Failed to call a function" in error_text:
+                    logger.warning("Model tool-call format failure", extra={"error": error_text[:500]})
+                    return (
+                        "I hit a tool-call formatting issue while querying Meridian systems. "
+                        "Please retry your request once; if it persists, ask a more specific query "
+                        "like 'list all products in monitors category'.",
+                        used_tools,
+                    )
+                logger.exception("LLM completion failed")
+                return "I could not process that request right now. Please try again.", used_tools
 
             choice = response.choices[0].message
 

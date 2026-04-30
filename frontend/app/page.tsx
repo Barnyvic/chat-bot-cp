@@ -122,20 +122,22 @@ export default function HomePage() {
         </p>
       </section>
 
-      <section className="mb-4 flex-1 space-y-3 overflow-y-auto rounded-2xl border border-slate-700/50 bg-slate-900/40 p-4">
+      <section className="mb-4 flex-1 space-y-3 overflow-x-hidden overflow-y-auto rounded-2xl border border-slate-700/50 bg-slate-900/40 p-4">
         {messages.length === 0 ? (
           <p className="text-sm text-slate-400">Start by asking about product availability or order history.</p>
         ) : null}
         {messages.map((msg, index) => (
           <div
             key={`${msg.role}-${index}`}
-            className={`rounded-xl px-4 py-3 text-sm ${
+            className={`w-fit rounded-xl px-4 py-3 text-sm leading-6 ${
               msg.role === 'user'
                 ? 'ml-auto max-w-[80%] bg-indigo-500/25 text-indigo-100'
                 : 'mr-auto max-w-[90%] bg-slate-800/80 text-slate-100'
             }`}
           >
-            {msg.content || (isLoading && index === messages.length - 1 ? 'Thinking...' : '')}
+            <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+              {msg.content || (isLoading && index === messages.length - 1 ? 'Thinking...' : '')}
+            </p>
           </div>
         ))}
         {isLoading && streamState === 'streaming' ? (

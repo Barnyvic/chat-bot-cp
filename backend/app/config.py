@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     app_debug: bool = False
 
     groq_api_key: str = Field(default="")
-    llm_model: str = Field(default="llama-3.1-8b-instant")
+    llm_model: str = Field(default="llama-3.3-70b-versatile")
 
     mcp_server_url: AnyHttpUrl = Field(
         default="https://order-mcp-74afyau24q-uc.a.run.app/mcp"

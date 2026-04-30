@@ -10,3 +10,4 @@ infra/terraform/terraform.auto.tfvars
 .DS_Store
 node_modules/
 .next/
+*.auto.tfvars
